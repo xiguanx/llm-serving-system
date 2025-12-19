@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  llm-server:
+    build: .
+    ports:
+      - "8000:8000"
+      - "9090:9090"
+    environment:
+      - ENGINE_TYPE=simple
+      - MODEL_NAME=gpt2
+      - MAX_TOKENS=512
+      - ENABLE_METRICS=true
+      - ENABLE_TRACING=true
+    volumes:
+      - ./app:/app/app
+      - ./engine:/app/engine
+      - ./middleware:/app/middleware
+      - model-cache:/root/.cache/huggingface
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    networks:
+      - llm-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  model-cache:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  llm-network:
+    driver: bridge
